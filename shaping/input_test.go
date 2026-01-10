@@ -6,10 +6,10 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/go-text/typesetting/di"
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/language"
-	tu "github.com/go-text/typesetting/testutils"
+	"github.com/unidoc/typesetting/di"
+	"github.com/unidoc/typesetting/font"
+	"github.com/unidoc/typesetting/language"
+	tu "github.com/unidoc/typesetting/testutils"
 )
 
 func Test_ignoreFaceChange(t *testing.T) {

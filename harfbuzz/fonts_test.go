@@ -5,9 +5,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/language"
-	tu "github.com/go-text/typesetting/testutils"
+	"github.com/unidoc/typesetting/font"
+	"github.com/unidoc/typesetting/language"
+	tu "github.com/unidoc/typesetting/testutils"
 )
 
 // Unit tests for glyph advance Widths and extents of TrueType variable fonts
