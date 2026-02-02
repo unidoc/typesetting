@@ -3,8 +3,8 @@ package harfbuzz
 import (
 	"testing"
 
+	"github.com/unidoc/typesetting/internal/unicodedata"
 	"github.com/unidoc/typesetting/language"
-	"github.com/unidoc/typesetting/unicodedata"
 )
 
 // ported from harfbuzz/test/api/test-unicode.c Copyright © 2011  Codethink Limited, Google, Inc. Ryan Lortie, Behdad Esfahbod

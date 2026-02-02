@@ -15,7 +15,7 @@ package segmenter
 import (
 	"unicode"
 
-	ucd "github.com/unidoc/typesetting/unicodedata"
+	ucd "github.com/unidoc/typesetting/internal/unicodedata"
 )
 
 // breakAttr is a flag storing the break properties between two runes of

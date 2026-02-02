@@ -3,7 +3,7 @@
 package segmenter
 
 import (
-	ucd "github.com/unidoc/typesetting/unicodedata"
+	ucd "github.com/unidoc/typesetting/internal/unicodedata"
 )
 
 // -----------------------------------------------------------------------
