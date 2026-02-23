@@ -8,7 +8,7 @@ import "github.com/unidoc/typesetting/language"
 
 func outputDottedCircle(buffer *Buffer) {
 	buffer.outputRune(0x25CC)
-	buffer.prev().resetContinutation()
+	buffer.prev().clearContinuation()
 }
 
 func outputWithDottedCircle(buffer *Buffer) {
