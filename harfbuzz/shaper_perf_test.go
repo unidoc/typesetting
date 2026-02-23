@@ -3,7 +3,7 @@ package harfbuzz
 import (
 	"testing"
 
-	td "github.com/unidoc/typesetting-utils/harfbuzz"
+	td "github.com/go-text/typesetting-utils/harfbuzz"
 	"github.com/unidoc/typesetting/font"
 	"github.com/unidoc/typesetting/language"
 	tu "github.com/unidoc/typesetting/testutils"
