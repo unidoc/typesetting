@@ -3,6 +3,7 @@ package harfbuzz
 import (
 	ot "github.com/unidoc/typesetting/font/opentype"
 	"github.com/unidoc/typesetting/font/opentype/tables"
+	ucd "github.com/unidoc/typesetting/internal/unicodedata"
 )
 
 // ported from harfbuzz/src/hb-ot-shape-complex-hebrew.cc Copyright © 2010,2012  Google, Inc.  Behdad Esfahbod
@@ -48,7 +49,7 @@ var sDageshForms = [0x05EA - 0x05D0 + 1]rune{
 }
 
 func (complexShaperHebrew) compose(c *otNormalizeContext, a, b rune) (rune, bool) {
-	ab, found := uni.compose(a, b)
+	ab, found := ucd.Compose(a, b)
 
 	if !found && !c.plan.hasGposMark {
 		/* Special-case Hebrew presentation forms that are excluded from
