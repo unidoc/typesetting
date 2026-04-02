@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"testing"
 
+	hb "github.com/go-text/typesetting-utils/harfbuzz"
 	td "github.com/go-text/typesetting-utils/opentype"
 	ot "github.com/unidoc/typesetting/font/opentype"
 	"github.com/unidoc/typesetting/font/opentype/tables"
@@ -119,6 +120,7 @@ func TestLoadCFF2(t *testing.T) {
 
 	font, err := NewFont(ld)
 	tu.AssertNoErr(t, err)
+	tu.Assert(t, font.Flavor == ot.OpenType)
 
 	tu.Assert(t, font.cff2 != nil)
 	tu.Assert(t, font.cff2.VarStore.AxisCount() == 1)
@@ -139,10 +141,43 @@ func TestLoadColor(t *testing.T) {
 	ld := readFontFile(t, "color/NotoColorEmoji-Regular.ttf")
 	ft, err := NewFont(ld)
 	tu.AssertNoErr(t, err)
+	tu.Assert(t, ft.Flavor == ot.TrueType)
 	tu.Assert(t, ft.COLR != nil && ft.CPAL != nil)
 
 	ld = readFontFile(t, "color/CoralPixels-Regular.ttf")
 	ft, err = NewFont(ld)
 	tu.AssertNoErr(t, err)
 	tu.Assert(t, ft.COLR != nil && ft.CPAL != nil)
+}
+
+func TestParseSTAT(t *testing.T) {
+	for _, path := range td.WithAvar {
+		ld := readFontFile(t, path)
+		ft, err := NewFont(ld)
+		tu.AssertNoErr(t, err)
+		tu.Assert(t, ft.STAT != nil)
+	}
+}
+
+func TestGDEFBlocklist(t *testing.T) {
+	t.Skip("requiert a proprietary font")
+
+	file, err := hb.Files.ReadFile("harfbuzz_reference/in-house/macos/System/Library/Fonts/Supplemental/Courier New.ttf")
+	tu.AssertNoErr(t, err)
+
+	fp, err := ot.NewLoader(bytes.NewReader(file))
+	tu.AssertNoErr(t, err)
+
+	ft, err := NewFont(fp)
+	tu.AssertNoErr(t, err)
+	tu.Assert(t, ft.GDEF.GlyphClassDef == nil)
+}
+
+func TestBitmapExtents(t *testing.T) {
+	ld := readFontFile(t, "bitmap/cherry-10-r.otb")
+	ft, err := NewFont(ld)
+	tu.AssertNoErr(t, err)
+	face := NewFace(ft)
+	extents, ok := face.GlyphExtents(41)
+	tu.Assert(t, ok && extents.Width == 819.2 && extents.Height == -1433.6)
 }

@@ -13,6 +13,15 @@ import (
 	tu "github.com/unidoc/typesetting/testutils"
 )
 
+type initMode int
+
+const (
+	initModeRunes initMode = iota
+	initModeString
+	initModeBytes
+	initModeMax
+)
+
 func hex(rs []rune) string {
 	out := ""
 	for _, r := range rs {
@@ -21,28 +30,27 @@ func hex(rs []rune) string {
 	return out[1:]
 }
 
-func collectLines(s *Segmenter, input []rune) []string {
-	s.Init(input)
+func collectLineBreaks(s *Segmenter) []int {
 	iter := s.LineIterator()
-	var out []string
+	var out []int
 	for iter.Next() {
-		out = append(out, string(iter.Line().Text))
+		line := iter.Line()
+		out = append(out, line.Offset+len(line.Text))
 	}
 	return out
 }
 
-func collectGraphemes(s *Segmenter, input []rune) []string {
-	s.Init(input)
+func collectGraphemes(s *Segmenter) []int {
 	iter := s.GraphemeIterator()
-	var out []string
+	var out []int
 	for iter.Next() {
-		out = append(out, string(iter.Grapheme().Text))
+		line := iter.Grapheme()
+		out = append(out, line.Offset+len(line.Text))
 	}
 	return out
 }
 
-func collectWords(s *Segmenter, input []rune) []string {
-	s.Init(input)
+func collectWords(s *Segmenter) []string {
 	iter := s.WordIterator()
 	var out []string
 	for iter.Next() {
@@ -51,8 +59,7 @@ func collectWords(s *Segmenter, input []rune) []string {
 	return out
 }
 
-func collectWordBoundaries(s *Segmenter, input []rune) []bool {
-	s.Init(input)
+func collectWordBoundaries(s *Segmenter) []bool {
 	out := make([]bool, len(s.attributes))
 	for i, a := range s.attributes {
 		out[i] = a&wordBoundary != 0
@@ -69,15 +76,29 @@ func TestLineBreakUnicodeReference(t *testing.T) {
 	lines := strings.Split(string(b), "\n")
 
 	var seg1 Segmenter
-	for i, line := range lines {
-		if len(line) == 0 || strings.HasPrefix(line, "#") {
-			continue
-		}
-		s, expectedSegments := parseUCDTestLine(t, line)
-		text := []rune(s)
-		actualSegments := collectLines(&seg1, text)
-		if !reflect.DeepEqual(expectedSegments, actualSegments) {
-			t.Errorf("line %d [%s]: expected %s, got %s", i+1, hex(text), expectedSegments, actualSegments)
+	for mode := initModeRunes; mode < initModeMax; mode++ {
+		for i, line := range lines {
+			if len(line) == 0 || strings.HasPrefix(line, "#") {
+				continue
+			}
+			s, expectedSegments := parseUCDTestLine(t, line)
+			text := []rune(s)
+			switch mode {
+			case initModeRunes:
+				seg1.Init(text)
+			case initModeString:
+				if err := seg1.InitWithString(s); err != nil {
+					t.Error(err)
+				}
+			case initModeBytes:
+				if err := seg1.InitWithBytes([]byte(s)); err != nil {
+					t.Error(err)
+				}
+			}
+			actualSegments := collectLineBreaks(&seg1)
+			if !reflect.DeepEqual(expectedSegments, actualSegments) {
+				t.Fatalf("line %d [%s]: mode %d: expected breaks %v, got %v", i+1, hex(text), mode, expectedSegments, actualSegments)
+			}
 		}
 	}
 }
@@ -104,9 +125,8 @@ func parseUCDTestLineBoundary(t *testing.T, line string) (runes []rune, boundari
 	return
 }
 
-func parseUCDTestLine(t *testing.T, line string) (string, []string) {
-	var segments []string
-	var segmentStart int
+func parseUCDTestLine(t *testing.T, line string) (string, []int) {
+	var breaks []int
 
 	runes, boundaries := parseUCDTestLineBoundary(t, line)
 	for i, b := range boundaries {
@@ -115,12 +135,11 @@ func parseUCDTestLine(t *testing.T, line string) (string, []string) {
 		}
 		if b {
 			// boundary here
-			segments = append(segments, string(runes[segmentStart:i]))
-			segmentStart = i
+			breaks = append(breaks, i)
 		}
 	}
 
-	return string(runes), segments
+	return string(runes), breaks
 }
 
 func TestGraphemeBreakUnicodeReference(t *testing.T) {
@@ -132,15 +151,29 @@ func TestGraphemeBreakUnicodeReference(t *testing.T) {
 	lines := strings.Split(string(b), "\n")
 
 	var seg1 Segmenter
-	for i, line := range lines {
-		if len(line) == 0 || strings.HasPrefix(line, "#") {
-			continue
-		}
-		s, expectedSegments := parseUCDTestLine(t, line)
-		text := []rune(s)
-		actualSegments := collectGraphemes(&seg1, text)
-		if !reflect.DeepEqual(expectedSegments, actualSegments) {
-			t.Errorf("line %d [%s]: expected %#v, got %#v", i+1, hex(text), expectedSegments, actualSegments)
+	for mode := initModeRunes; mode < initModeMax; mode++ {
+		for i, line := range lines {
+			if len(line) == 0 || strings.HasPrefix(line, "#") {
+				continue
+			}
+			s, expectedSegments := parseUCDTestLine(t, line)
+			text := []rune(s)
+			switch mode {
+			case initModeRunes:
+				seg1.Init(text)
+			case initModeString:
+				if err := seg1.InitWithString(s); err != nil {
+					t.Error(err)
+				}
+			case initModeBytes:
+				if err := seg1.InitWithBytes([]byte(s)); err != nil {
+					t.Error(err)
+				}
+			}
+			actualSegments := collectGraphemes(&seg1)
+			if !reflect.DeepEqual(expectedSegments, actualSegments) {
+				t.Fatalf("line %d [%s]: mode %d: expected %v, got %v", i+1, hex(text), mode, expectedSegments, actualSegments)
+			}
 		}
 	}
 }
@@ -154,31 +187,132 @@ func TestWordBreakUnicodeReference(t *testing.T) {
 	lines := strings.Split(string(b), "\n")
 
 	var seg1 Segmenter
-	for i, line := range lines {
-		if len(line) == 0 || strings.HasPrefix(line, "#") {
-			continue
-		}
-		text, expectedBoundaries := parseUCDTestLineBoundary(t, line)
-		actualBoundaries := collectWordBoundaries(&seg1, text)
-		if !reflect.DeepEqual(expectedBoundaries, actualBoundaries) {
-			t.Errorf("line %d [%s]: expected %#v, got %#v", i+1, hex(text), expectedBoundaries, actualBoundaries)
+	for mode := initMode(0); mode < initModeMax; mode++ {
+		for i, line := range lines {
+			if len(line) == 0 || strings.HasPrefix(line, "#") {
+				continue
+			}
+			s, expectedBoundaries := parseUCDTestLineBoundary(t, line)
+			text := []rune(s)
+			switch mode {
+			case initModeRunes:
+				seg1.Init(text)
+			case initModeString:
+				if err := seg1.InitWithString(string(s)); err != nil {
+					t.Error(err)
+				}
+			case initModeBytes:
+				if err := seg1.InitWithBytes([]byte(string(s))); err != nil {
+					t.Error(err)
+				}
+			}
+			actualBoundaries := collectWordBoundaries(&seg1)
+			if !reflect.DeepEqual(expectedBoundaries, actualBoundaries) {
+				t.Errorf("line %d [%s]: mode %d: expected %#v, got %#v", i+1, hex(text), mode, expectedBoundaries, actualBoundaries)
+			}
 		}
 	}
 }
 
 func TestWordSegmenter(t *testing.T) {
 	var seg Segmenter
-	for _, test := range []struct {
-		input string
-		words []string
-	}{
-		{"My name is Cris", []string{"My", "name", "is", "Cris"}},
-		{"Je m'appelle Benoit.", []string{"Je", "m'appelle", "Benoit"}},
-		{"Hi : nice ?! suit !", []string{"Hi", "nice", "suit"}},
-	} {
-		got := collectWords(&seg, []rune(test.input))
-		if !reflect.DeepEqual(test.words, got) {
-			t.Errorf("for %s, expected %v, got %v", test.input, test.words, got)
+	for mode := initMode(0); mode < initModeMax; mode++ {
+		for _, test := range []struct {
+			input string
+			words []string
+		}{
+			{"My name is Cris", []string{"My", "name", "is", "Cris"}},
+			{"Je m'appelle Benoit.", []string{"Je", "m'appelle", "Benoit"}},
+			{"Hi : nice ?! suit !", []string{"Hi", "nice", "suit"}},
+		} {
+			switch mode {
+			case initModeRunes:
+				seg.Init([]rune(test.input))
+			case initModeString:
+				if err := seg.InitWithString(test.input); err != nil {
+					t.Error(err)
+				}
+			case initModeBytes:
+				if err := seg.InitWithBytes([]byte(test.input)); err != nil {
+					t.Error(err)
+				}
+			}
+			got := collectWords(&seg)
+			if !reflect.DeepEqual(test.words, got) {
+				t.Errorf("for %s, mode %d, expected %v, got %v", test.input, mode, test.words, got)
+			}
+		}
+	}
+}
+
+func TestBytePositions(t *testing.T) {
+	tests := []string{
+		"",
+		"a",
+		"Hello World",
+		"café latte",
+		"🍣寿司🍣",
+		"Hi 🧑‍🧒‍🧒 there", // Emoji with zero-width joiner
+		"This is a test.\ncafé\n🍣寿司🍣",
+		"aaa\ufffdbbb", // U+FFFD (Replacement Character)
+	}
+
+	var seg Segmenter
+	initSeg := func(seg *Segmenter, mode initMode, input string) {
+		switch mode {
+		case initModeRunes:
+			seg.Init([]rune(input))
+		case initModeString:
+			if err := seg.InitWithString(input); err != nil {
+				t.Error(err)
+			}
+		case initModeBytes:
+			if err := seg.InitWithBytes([]byte(input)); err != nil {
+				t.Error(err)
+			}
+		}
+	}
+
+	for mode := initMode(0); mode < initModeMax; mode++ {
+		for _, input := range tests {
+			// Test GraphemeIterator byte positions.
+			initSeg(&seg, mode, input)
+			iter := seg.GraphemeIterator()
+			for iter.Next() {
+				g := iter.Grapheme()
+				got := []rune(input[g.OffsetInBytes : g.OffsetInBytes+g.LengthInBytes])
+				expected := g.Text
+				if !reflect.DeepEqual(got, expected) {
+					t.Errorf("grapheme: input=%q mode=%d: byte slice %q != rune text %q (offset=%d, offsetInBytes=%d, lengthInBytes=%d)",
+						input, mode, got, expected, g.Offset, g.OffsetInBytes, g.LengthInBytes)
+				}
+			}
+
+			// Test LineIterator byte positions.
+			initSeg(&seg, mode, input)
+			lineIter := seg.LineIterator()
+			for lineIter.Next() {
+				l := lineIter.Line()
+				got := []rune(input[l.OffsetInBytes : l.OffsetInBytes+l.LengthInBytes])
+				expected := l.Text
+				if !reflect.DeepEqual(got, expected) {
+					t.Errorf("line: input=%q mode=%d: byte slice %q != rune text %q (offset=%d, offsetInBytes=%d, lengthInBytes=%d)",
+						input, mode, got, expected, l.Offset, l.OffsetInBytes, l.LengthInBytes)
+				}
+			}
+
+			// Test WordIterator byte positions.
+			initSeg(&seg, mode, input)
+			wordIter := seg.WordIterator()
+			for wordIter.Next() {
+				w := wordIter.Word()
+				got := []rune(input[w.OffsetInBytes : w.OffsetInBytes+w.LengthInBytes])
+				expected := w.Text
+				if !reflect.DeepEqual(got, expected) {
+					t.Errorf("word: input=%q mode=%d: byte slice %q != rune text %q (offset=%d, offsetInBytes=%d, lengthInBytes=%d)",
+						input, mode, got, expected, w.Offset, w.OffsetInBytes, w.LengthInBytes)
+				}
+			}
 		}
 	}
 }

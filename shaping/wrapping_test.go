@@ -3,6 +3,7 @@ package shaping
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"os"
 	"reflect"
 	"sort"
@@ -1567,8 +1568,7 @@ func complexGlyph(cluster, runes, glyphs int) Glyph {
 	return Glyph{
 		Width:        fixed.I(10),
 		Height:       fixed.I(10),
-		XAdvance:     fixed.I(10),
-		YAdvance:     fixed.I(10),
+		Advance:      fixed.I(10),
 		YBearing:     fixed.I(10),
 		ClusterIndex: cluster,
 		GlyphCount:   glyphs,
@@ -3563,4 +3563,63 @@ func TestTrimmedTrailingWhitespace(t *testing.T) {
 	tu.Assert(t, line.NextLine == 4)
 	tu.Assert(t, line.Line[0].Advance == fixed.I(4)) // the space is not collapsed
 	tu.Assert(t, line.TrimmedTrailingWhitespace == fixed.I(0))
+}
+
+func TestMaxWidthRouding(t *testing.T) {
+	text := []rune("a simple word") // odd number of letters (13)
+
+	face := loadOpentypeFont(t, "../font/testdata/UbuntuMono-R.ttf")
+	run := (&HarfbuzzShaper{}).Shape(Input{
+		Text:   text,
+		Face:   face,
+		Size:   36,
+		RunEnd: len(text),
+	})
+	tu.Assert(t, run.Glyphs[0].XAdvance == fixed.I(1)/2)
+	tu.Assert(t, run.Advance == 13*fixed.I(1)/2)
+
+	wr := LineWrapper{}
+
+	wr.Prepare(WrapConfig{}, text, NewSliceIterator([]Output{run}))
+	line, _ := wr.WrapNextLine(run.Advance.Floor())
+	tu.Assert(t, line.NextLine == 9)
+
+	wr.Prepare(WrapConfig{}, text, NewSliceIterator([]Output{run}))
+	line, _ = wr.WrapNextLineF(run.Advance)
+	tu.Assert(t, line.NextLine == 13)
+}
+
+func TestWrapping_oneLine_overflow_bug(t *testing.T) {
+	maxWidth := math.MaxInt
+
+	textInput := []rune("Lorem ipsum") // a simple input that fits on one line
+	face := benchEnFace
+	var shaper HarfbuzzShaper
+	out := []Output{shaper.Shape(Input{
+		Text:      textInput,
+		RunStart:  0,
+		RunEnd:    len(textInput),
+		Direction: di.DirectionLTR,
+		Face:      face,
+		Size:      fixed.I(16),
+		Script:    language.Latin,
+		Language:  language.NewLanguage("EN"),
+	})}
+	iter := NewSliceIterator(out)
+	var l LineWrapper
+
+	outs, _ := l.WrapParagraph(WrapConfig{BreakPolicy: Never}, maxWidth, textInput, iter)
+	if len(outs) != 1 {
+		t.Errorf("expected one line, got %d", len(outs))
+	}
+
+	// the run in iter should have been consumed
+	outs, _ = l.WrapParagraph(WrapConfig{BreakPolicy: Never}, maxWidth, textInput, iter)
+	if len(outs) != 0 {
+		t.Errorf("expected no line, got %d", len(outs))
+	}
+
+	l.Prepare(WrapConfig{BreakPolicy: Never}, textInput, NewSliceIterator(out))
+	_, done := l.WrapNextLine(maxWidth)
+	tu.Assert(t, done)
 }

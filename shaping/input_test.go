@@ -26,6 +26,7 @@ func Test_ignoreFaceChange(t *testing.T) {
 		{'\ufe02', true},
 		{'\U000E0100', true},
 		{'\u06DD', false},
+		{'\u200f', true},
 	}
 	for _, tt := range tests {
 		if got := ignoreFaceChange(tt.args); got != tt.want {
@@ -69,9 +70,9 @@ func TestSplitByFontGlyphs(t *testing.T) {
 		availableFaces []*font.Face
 	}
 
-	universalFont := &font.Face{Font: &font.Font{Cmap: universalCmap{}}}
-	lowerFont := &font.Face{Font: &font.Font{Cmap: lowerCmap{}}}
-	upperFont := &font.Face{Font: &font.Font{Cmap: upperCmap{}}}
+	universalFont := font.NewFace(&font.Font{Cmap: universalCmap{}})
+	lowerFont := font.NewFace(&font.Font{Cmap: lowerCmap{}})
+	upperFont := font.NewFace(&font.Font{Cmap: upperCmap{}})
 
 	latinFont := loadOpentypeFont(t, "../font/testdata/Roboto-Regular.ttf")
 	arabicFont := loadOpentypeFont(t, "../font/testdata/Amiri-Regular.ttf")
@@ -430,6 +431,76 @@ func TestSplitScript(t *testing.T) {
 			tu.Assert(t, got.Script == run.script)
 		}
 	}
+
+	// Verifies that Arabic diacritics (which usually have
+	// script 'Inherited') are correctly clustered with their base Arabic letters,
+	// rather than being split into a separate shaping run.
+	for _, test := range []struct {
+		text         []rune
+		expectedRuns []run
+	}{
+		{
+			// Arabic Letter + Diacritic
+			// \u0628 => BEH
+			// \u0650 => KASRA (Diacritic)
+			[]rune{'\u0628', '\u0650'},
+			[]run{{0, 2, language.Arabic}},
+		},
+		{
+			// Arabic Word with Multiple Diacritics
+			[]rune{
+				'\u0628', // BEH
+				'\u0650', // KASRA
+				'\u0633', // SEEN
+				'\u0652', // SUKUN
+				'\u0645', // MEEM
+				'\u0650', // KASRA
+			},
+			[]run{{0, 6, language.Arabic}},
+		},
+		{
+			// Mixed Script (CONTROL Case) #1
+			// Arabic Letter + Latin Letter
+			// THESE MUST SPLIT TO 2.
+			[]rune{'\u0628', 'A'},
+			[]run{
+				{0, 1, language.Arabic},
+				{1, 2, language.Latin},
+			},
+		},
+		{
+			// Mixed Script (CONTROL Case) #2
+			// Arabic Letter + Diacritic + Diacritic + Latin Letter + Arabic Letter + Diacritic
+			// THESE MUST SPLIT TO 3.
+			[]rune{'\u0628', '\u0651', '\u0650', 'A', '\u0628', '\u0650'},
+			[]run{
+				{0, 3, language.Arabic},
+				{3, 4, language.Latin},
+				{4, 6, language.Arabic},
+			},
+		},
+		{
+			// Mixed Script (A little 'stress' test)
+			// Latin 's' + Arabic Kasra + Latin 'r' + Arabic Fatha
+			// this is technically valid unicode!
+			// the diacritics should inherit "Latin"
+			[]rune{'s', '\u0651', '\u0650', 'r', '\u064E'},
+			[]run{{0, 5, language.Latin}},
+		},
+	} {
+		var seg Segmenter
+		seg.splitByBidi(Input{Text: test.text, RunEnd: len(test.text), Direction: di.DirectionLTR})
+		seg.input, seg.output = seg.output, seg.input
+
+		seg.splitByScript()
+		tu.Assert(t, len(seg.output) == len(test.expectedRuns))
+		for i, run := range test.expectedRuns {
+			got := seg.output[i]
+			tu.Assert(t, got.RunStart == run.start)
+			tu.Assert(t, got.RunEnd == run.end)
+			tu.Assert(t, got.Script == run.script)
+		}
+	}
 }
 
 func TestSplitVertOrientation(t *testing.T) {
@@ -587,6 +658,23 @@ func TestSplit(t *testing.T) {
 			di.DirectionTTB,
 			[]run{
 				{0, 8, sideways, language.Mongolian, "mn", latinFont},
+			},
+		},
+		{
+			"\u200fabc", // the mark should not trigger a face change, even "across" different directions/scripts
+			di.DirectionLTR,
+			[]run{
+				{0, 1, di.DirectionRTL, language.Common, "fr", latinFont},
+				{1, 4, di.DirectionLTR, language.Latin, "fr", latinFont},
+			},
+		},
+		{
+			"a\u200fabc", // the mark should not trigger a face change, even "across" different directions/scripts
+			di.DirectionLTR,
+			[]run{
+				{0, 1, di.DirectionLTR, language.Latin, "fr", latinFont},
+				{1, 2, di.DirectionRTL, language.Common, "fr", latinFont},
+				{2, 5, di.DirectionLTR, language.Latin, "fr", latinFont},
 			},
 		},
 	} {

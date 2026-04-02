@@ -215,8 +215,7 @@ func TestGlyfSegments1(t *testing.T) {
 
 	face := Face{Font: f}
 	for i, expected := range expecteds {
-		var points []contourPoint
-		face.getPointsForGlyph(gID(i), 0, &points)
+		points := face.getPointsForGlyph(gID(i))
 
 		got := buildSegments(points[:len(points)-phantomCount])
 		if len(expected) == 0 {
@@ -228,14 +227,13 @@ func TestGlyfSegments1(t *testing.T) {
 }
 
 func BenchmarkBuildSegments(b *testing.B) {
-	var points []contourPoint
 	font := loadFont(b, "common/Roboto-BoldItalic.ttf")
 	face := Face{Font: font}
 	gid, ok := face.NominalGlyph('&')
 	if !ok {
 		b.Fatal("did not find & in the font")
 	}
-	face.getPointsForGlyph(uint16(gid), 0, &points)
+	points := face.getPointsForGlyph(uint16(gid))
 
 	b.ResetTimer()
 
@@ -384,8 +382,7 @@ func TestGlyfSegments2(t *testing.T) {
 
 	face := Face{Font: font}
 	for i, expected := range expecteds {
-		var points []contourPoint
-		face.getPointsForGlyph(gID(i), 0, &points)
+		points := face.getPointsForGlyph(gID(i))
 		got := buildSegments(points[:len(points)-phantomCount])
 		if len(expected) == 0 {
 			expected = nil
@@ -568,6 +565,21 @@ func TestEblcGlyph(t *testing.T) {
 	}
 }
 
+func TestEBDTFormat1Glyph(t *testing.T) {
+	file, err := td.Files.ReadFile("bitmap/simsun.ttc")
+	tu.AssertNoErr(t, err)
+
+	faces, err := ParseTTC(bytes.NewReader(file))
+	tu.AssertNoErr(t, err)
+	font := faces[0]
+	font.SetPpem(12, 12)
+
+	for gid := GID(100); gid < 500; gid++ {
+		glyph, ok := font.GlyphData(gid).(GlyphBitmap)
+		tu.Assert(t, ok && glyph.Format == BlackAndWhiteByteAligned)
+	}
+}
+
 func TestAppleBitmapGlyph(t *testing.T) {
 	filename := "collections/Gacha_9.dfont"
 	f, err := td.Files.ReadFile(filename)
@@ -590,6 +602,9 @@ func TestAppleBitmapGlyph(t *testing.T) {
 		asBitmap, ok := data.(GlyphBitmap)
 		tu.Assert(t, ok)
 		tu.Assert(t, asBitmap.Format == BlackAndWhite)
+
+		_, ok = face.GlyphDataBitmap(gID(gid))
+		tu.Assert(t, ok)
 	}
 }
 
@@ -615,11 +630,15 @@ func TestColorGlyphs(t *testing.T) {
 	face := NewFace(ft)
 	_, ok := face.GlyphData(12).(GlyphColor)
 	tu.Assert(t, ok)
+	_, ok = face.GlyphDataColor(12)
+	tu.Assert(t, ok)
 
 	ld = readFontFile(t, "color/CoralPixels-Regular.ttf")
 	ft, err = NewFont(ld)
 	tu.AssertNoErr(t, err)
 	face = NewFace(ft)
 	_, ok = face.GlyphData(0).(GlyphColor)
+	tu.Assert(t, ok)
+	_, ok = face.GlyphDataColor(0)
 	tu.Assert(t, ok)
 }
